@@ -1,11 +1,11 @@
-from transformers import LlamaForSequenceClassification, LlamaTokenizer
+from transformers import LlamaForSequenceClassification, LlamaTokenizer, AutoTokenizer, AutoModelForCausalLM
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 from sklearn.metrics import accuracy_score
 
-df = pd.read_csv("./data/cleaneddata.csv")
-tokenizer = LlamaTokenizer.from_pretrained("llama-70b")
+df = pd.read_csv("./small_df.csv")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 
 class TextClassificationDataset(Dataset):
     def __init__(self, df, tokenizer):
@@ -38,7 +38,7 @@ dataset = TextClassificationDataset(df, tokenizer)
 
 loader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-model = LlamaForSequenceClassification.from_pretrained("llama-70b", num_labels = 18)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B-Instruct", num_labels = 18)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
