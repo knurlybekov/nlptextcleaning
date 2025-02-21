@@ -1,19 +1,26 @@
-from transformers import LlamaForSequenceClassification, LlamaTokenizer, AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import LabelEncoder
 import os
-from huggingface_hub import Repository
 
-df = pd.read_csv("./small_df.csv")
+huggingFaceToken = "" #needs token from hugging face, ask Ethan
+trainingData = "./small_df.csv" #Path to training data
+validationData = "./small_df.csv" #Path to validation data
+#Make sure the label in training and validation csv is headed as "category" and text is labled as "text_cl"
+
+df = pd.read_csv(trainingData)
 label_encoder = LabelEncoder()
 df["category"] = label_encoder.fit_transform(df["category"])
+encoding_map = {i: label for i, label in enumerate(label_encoder.classes_)}
+print(encoding_map)
 
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B", token = huggingFaceToken) 
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "left"
+print(repr(tokenizer.pad_token))
 
 class TextClassificationDataset(Dataset):
     def __init__(self, df, tokenizer):
@@ -34,7 +41,6 @@ class TextClassificationDataset(Dataset):
             truncation=True,
             return_attention_mask=True,
             return_tensors="pt",
-            #pad_token=self.tokenizer.eos_token_id,
         )
 
         return {
@@ -46,20 +52,21 @@ class TextClassificationDataset(Dataset):
 dataset = TextClassificationDataset(df, tokenizer)
 
 loader = DataLoader(dataset, batch_size=8, shuffle=True)
-print(len(loader))
+print(f"Batches: {len(loader)}")
 
-model = AutoModelForSequenceClassification.from_pretrained("meta-llama/Llama-3.1-8B", num_labels = 19)
-model.resize_token_embeddings(len(tokenizer))
+model = AutoModelForSequenceClassification.from_pretrained("meta-llama/Llama-3.2-1B", num_labels = 19, token = huggingFaceToken)
+model.config.pad_token_id = model.config.eos_token_id
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 try:
-    for epoch in range(5):
+    for epoch in range(2):
         print("starting epoch: " + str(epoch))
         model.train()
         total_loss = 0
+        batchNum = 0
         for batch in loader:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
@@ -68,20 +75,25 @@ try:
             optimizer.zero_grad()
 
             outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
+            loss = outputs.loss.mean()
 
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
-            print(f"Epoch {epoch+1}, Loss: {total_loss / len(loader)}")
+            batchNum += 1
+            print(f"Epoch {epoch+1}, Batch: {batchNum}, Loss: {total_loss / len(loader)}")
 except RuntimeError as e:
     print("RuntimeError:", e)
 
 
 model.eval()
 
-testLoader = DataLoader(dataset, batch_size=32, shuffle=False)
+testData = pd.read_csv(trainingData)
+testData["category"] = label_encoder.fit_transform(df["category"])
+testLoader = DataLoader(testData, batch_size=8, shuffle=False)
+df["category"] = label_encoder.fit_transform(df["category"])
+
 correct = 0
 total = 0
 with torch.no_grad():
@@ -101,7 +113,7 @@ with torch.no_grad():
 
 accuracy = correct / len(testLoader.dataset)
 
-print(accuracy)
+print(f"Accuracy: {accuracy}")
 
 
 save_dir = "./trainedModels"
