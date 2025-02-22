@@ -2,13 +2,14 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
-from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import LabelEncoder
 import os
 
+
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 huggingFaceToken = "" #needs token from hugging face, ask Ethan
-trainingData = "./small_df.csv" #Path to training data
-validationData = "./small_df.csv" #Path to validation data
+trainingData = "./sampledDataTrain.csv" #Path to training data
+validationData = "./sampledDataTest.csv" #Path to validation data
 #Make sure the label in training and validation csv is headed as "category" and text is labled as "text_cl"
 
 df = pd.read_csv(trainingData)
@@ -31,7 +32,7 @@ class TextClassificationDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        text = self.df.iloc[idx]["text_cl"]
+        text = self.df.iloc[idx]["fixed_text"]
         label = self.df.iloc[idx]["category"]
 
         encoding = self.tokenizer(
@@ -57,12 +58,13 @@ print(f"Batches: {len(loader)}")
 model = AutoModelForSequenceClassification.from_pretrained("meta-llama/Llama-3.2-1B", num_labels = 19, token = huggingFaceToken)
 model.config.pad_token_id = model.config.eos_token_id
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #"cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+torch.cuda.empty_cache()
 try:
-    for epoch in range(2):
+    for epoch in range(1):
         print("starting epoch: " + str(epoch))
         model.train()
         total_loss = 0
@@ -91,13 +93,18 @@ model.eval()
 
 testData = pd.read_csv(trainingData)
 testData["category"] = label_encoder.fit_transform(df["category"])
-testLoader = DataLoader(testData, batch_size=8, shuffle=False)
 df["category"] = label_encoder.fit_transform(df["category"])
+
+testdataset = TextClassificationDataset(testData, tokenizer)
+testLoader = DataLoader(testdataset, batch_size=8, shuffle=False)
+
 
 correct = 0
 total = 0
+tBatch = 0
 with torch.no_grad():
     for batch in testLoader:
+        print(f"Starting test batch {tBatch}")
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
         labels = batch["category"].to(device)
@@ -110,6 +117,7 @@ with torch.no_grad():
         _, predicted = torch.max(outputs.logits, dim=1)
 
         correct += (predicted == labels).sum().item()
+        tBatch += 1
 
 accuracy = correct / len(testLoader.dataset)
 
