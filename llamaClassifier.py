@@ -91,9 +91,8 @@ except RuntimeError as e:
 
 model.eval()
 
-testData = pd.read_csv(trainingData)
-testData["category"] = label_encoder.fit_transform(df["category"])
-df["category"] = label_encoder.fit_transform(df["category"])
+testData = pd.read_csv(validationData)
+testData["category"] = label_encoder.transform(testData["category"])
 
 testdataset = TextClassificationDataset(testData, tokenizer)
 testLoader = DataLoader(testdataset, batch_size=8, shuffle=False)
