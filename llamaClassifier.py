@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import classification_report
 import os
 
 
@@ -101,6 +102,9 @@ testLoader = DataLoader(testdataset, batch_size=8, shuffle=False)
 correct = 0
 total = 0
 tBatch = 0
+predicted_labels = []
+actual_labels = []
+
 with torch.no_grad():
     for batch in testLoader:
         print(f"Starting test batch {tBatch}")
@@ -116,11 +120,27 @@ with torch.no_grad():
         _, predicted = torch.max(outputs.logits, dim=1)
 
         correct += (predicted == labels).sum().item()
+        total += labels.size(0)
         tBatch += 1
+
+        try:
+            predicted_labels.extend(predicted.cpu().numpy())
+            actual_labels.extend(labels.cpu().numpy())
+        except Exception:
+            print("That didn't work")
 
 accuracy = correct / len(testLoader.dataset)
 
 print(f"Accuracy: {accuracy}")
+report = classification_report(actual_labels, predicted_labels, output_dict=True)
+print("Classification Report:")
+for label, metrics in report.items():
+    print(f"Label: {label}")
+    print(f"Precision: {metrics['precision']:.4f}")
+    print(f"Recall: {metrics['recall']:.4f}")
+    print(f"F1-score: {metrics['f1-score']:.4f}")
+    print(f"Support: {metrics['support']}")
+    print()
 
 
 save_dir = "./trainedModels"
