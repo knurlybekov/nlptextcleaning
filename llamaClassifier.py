@@ -58,7 +58,7 @@ print(f"Batches: {len(loader)}")
 model = AutoModelForSequenceClassification.from_pretrained("meta-llama/Llama-3.2-1B", num_labels = 19, token = huggingFaceToken)
 model.config.pad_token_id = model.config.eos_token_id
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #"cuda" if torch.cuda.is_available() else "cpu"
+device = torch.device("cpu") #"cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
